@@ -1,0 +1,44 @@
+from google.cloud import bigquery
+import os
+perplex = pd.readcsv("name_of_file.csv") ###DOWNLOAD USPTO LITIGATION SET AND APPEND LITIGATION SCORES####
+
+
+
+
+# Replace with the absolute path to your service account key JSON file
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "ACCOUNT KEY"
+
+# Create a BigQuery client
+client = bigquery.Client()
+
+perplex_id_list = ', '.join(f"'{id}'" for id in perplex["id"])
+
+citations_query = f"""
+    SELECT patent_id, COUNT(*)
+    FROM `patents-public-data.patentsview.usapplicationcitation`
+    WHERE patent_id IN ({perplex_id_list}) 
+    GROUP BY patent_id
+        """
+# Define the SQL query
+c2 = client.query(citations_query).result().to_dataframe()
+
+
+###Expiration Status Query---Not available directly in Bigquery###
+
+def status(patent):
+    try:
+        url = "https://patents.google.com/patent/US" + str(patent)
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'lxml')
+        text = soup.get_text()
+        t2 = text.split("\n")
+        s = t2.index('Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)') + 2
+        return t2[s]
+    except Exception as e:
+        print(f"Error processing patent {patent}: {e}")
+        return None
+
+def process_patents(patent_list, num_threads=4):
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = list(executor.map(status, patent_list))
+    return results
